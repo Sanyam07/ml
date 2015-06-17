@@ -69,7 +69,7 @@ def score_median_mt_envelope(scorer):
 
 
 # TODO: add flat
-# TOOO: auto switch to MT
+# TODO: auto switch to MT
 
 def _pickle_bypass(cls, function_name, *args, **kwargs):
     #: used to bypass multiprocessing
@@ -289,8 +289,8 @@ class Tester():
         self.shuffle_ind = np.arange(X.shape[0])
         np.random.shuffle(self.shuffle_ind)
 
-    def optimise_learners(self, X_train, X_test, Y_train, learners, parameters, scorer=score_mean_mt_r2, maximise=True,
-                          timeout=100, parallelise='grid', cores=4, inner_folds=4, verbose=None):
+    def _optimise_learners(self, X_train, X_test, Y_train, learners, parameters, scorer=score_mean_mt_r2, maximise=True,
+                           timeout=100, parallelise='grid', cores=4, inner_folds=4, verbose=None):
         opt = Optimiser(scorer=scorer, maximise=maximise, cores=cores, verbose=verbose if verbose else self.verbose,
                         timeout=timeout, folds=inner_folds, parallelise=parallelise, random_state=self.random_state)
 
@@ -326,18 +326,43 @@ class Tester():
 
     @abstractmethod
     def learn(self, learners, parameters, scorer=score_mean_mt_r2, maximise=True, timeout=100, paralelise="grid",
-              cores=4,
-              inner_folds=4, verbose=None):
+              cores=4, inner_folds=4, verbose=None):
         raise NotImplementedError
 
 
 class TesterSplit(Tester):
-    pass  # TODO
+    def __init__(self, train_ratio=.7, optimise_individual=False, random_state=42, verbose=1):
+        Tester.__init__(self, optimise_individual=optimise_individual, random_state=random_state, verbose=verbose)
+
+        self.train_ratio = train_ratio
+
+    def initialise(self, X, Y):
+        self._shuffle(X)
+
+        N = int(X.shape[0] * self.train_ratio)
+        self.X_train, self.X_test = X[self.shuffle_ind[:N], :], X[self.shuffle_ind[N:], :]
+        self.Y_train, self.Y_test = Y[self.shuffle_ind[:N], :], Y[self.shuffle_ind[N:], :]
+
+        self.initialised = True
+
+        return self.X_train, self.X_test, self.Y_train, self.Y_test
+
+    def learn(self, learners, parameters, scorer=score_mean_mt_r2, maximise=True, timeout=100, paralelise='grid',
+              cores=4,
+              inner_folds=4, verbose=None):
+        if type(learners) != list:
+            learners = [learners]
+        Yp, cls, best_params = self._optimise_learners(self.X_train, self.X_test, self.Y_train, learners, parameters,
+                                                       maximise=maximise, scorer=scorer, timeout=timeout,
+                                                       parallelise=paralelise, cores=cores, inner_folds=inner_folds,
+                                                       verbose=verbose)
+        return Yp, cls, best_params, self
 
 
 class TesterCV(Tester):
     def __init__(self, folds=4, optimise_individual=False, random_state=42, verbose=1):
         Tester.__init__(self, optimise_individual=optimise_individual, random_state=random_state, verbose=verbose)
+
         self.folds = folds
 
     def initialise(self, X, Y):
@@ -363,8 +388,10 @@ class TesterCV(Tester):
             if self.verbose > 0:
                 print "fold%d/%d, trains size %d, test size %d"
             X_train, X_test, Y_train = self.X[train_ind], self.X[test_ind], self.Y[train_ind]
-            Yp, cls, best_params = self._optimise_learners(X_train, X_test, Y_train, learners,
-                                                           parameters)  # TODO everzthing eslse)
+            Yp, cls, best_params = self._optimise_learners(X_train, X_test, Y_train, learners, parameters,
+                                                           maximise=maximise, scorer=scorer, timeout=timeout,
+                                                           parallelise=paralelise, cores=cores, inner_folds=inner_folds,
+                                                           verbose=verbose)
 
             if len(Y_hat.shape) == 1:
                 Y_hat[test_ind] = Yp

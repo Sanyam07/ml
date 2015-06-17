@@ -9,31 +9,36 @@ from sklearn.decomposition import PCA
 from analyse.preprocess import ImputeRegression, PreProcessor
 
 
-class MultitargetWrapper:
-    __metaclass__ = ABCMeta
+class TechniqueWrapper:
     POSSIBLE_TRANSFORMERS = ['kbest', 'pca']
 
-    def __init__(self, pre=None, best=0, transformer=None, class_imputer=None):
-
-        if pre not in [None] + PreProcessor.POSSIBLE_KINDS:
-            raise ValueError("")
+    def __init__(self, technique, preprocessor=None, kbest_n=0, transformer=None, class_imputer=None, **kwargs):
+        if preprocessor not in [None] + PreProcessor.POSSIBLE_KINDS:
+            raise ValueError("preprocessor not in PreProcessor.POSSIBLE_KINDS")
         if transformer not in [None] + self.POSSIBLE_TRANSFORMERS:
-            raise ValueError
+            raise ValueError("transformer not in POSSIBLE_TRANSFORMERS")
+        if kbest_n == 'kbest' and kbest_n is None:
+            raise ValueError("kbset transformer requires best to be set")
         if class_imputer not in [None] + ImputeRegression.POSSIBLE_STRATEGIES:
-            raise ValueError
+            raise ValueError("class_imputer not in ImputeRegression.POSSIBLE_STRATEGIES")
 
-        self.preprocessing = pre
+
+        self.technique = technique
+        self.preprocessor = preprocessor
         self.class_imputer = class_imputer
-        self.best = best
+        self.transformer = transformer
+        self.kbest_n = kbest_n
+
         self.regressors = None
         self.transformers = None
         self.imputers = None
-        self.kbset = transformer = "kbest"
 
-        # TODO bagging params
 
         self.name = "MultitargetWrapper"
 
+
+    def name_fun(self):
+        return "%s %s %s %s %s %s" % (self.technque_name, self.preprocessor)
 
     def __call__(self, X_train, Y_train, X_test):
         self.fit(X_train, Y_train)
@@ -122,18 +127,22 @@ class MultitargetWrapper:
         if regressor is None:
             raise NotImplementedError
         if self.bagging:
-            return skensemble.baggingregressor #....
+            return skensemble.baggingregressor  # ....
 
         return regressor
 
+
+
+
+
 #
 # class SimpleRegressor(MultitargetWrapper):
-#     POSSIBLE
-#     STRATEGISE = ['mean', 'median', 'most_commin']
+# POSSIBLE
+# STRATEGISE = ['mean', 'median', 'most_commin']
 #
 #
 # class SMBRegressor(Wrapper):
-#     def __init__(self):
+# def __init__(self):
 #         wrapper.__init__
 #
 #

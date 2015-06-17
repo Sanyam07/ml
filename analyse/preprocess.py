@@ -6,10 +6,8 @@ from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
 
-from analyse.test import score_mse
 
-
-def _ensure_masked(array):
+def _ensure_array_is_masked(array):
     if not np.ma.isMaskedArray(array) or not np.ma.is_masked(array):
         raise ValueError("Impute works with a masked array containing missing values")
 
@@ -26,7 +24,7 @@ class Drop:
         self.column_mask = None
 
     def fit(self, data):
-        _ensure_masked(data)
+        _ensure_array_is_masked(data)
         self.column_mask = None
         # masks columns with more than drop_threshold missing values, abort if all would  be dropped
         if len(data.shape) > 1:
@@ -69,7 +67,7 @@ class Impute:
         self.strategy = strategy
 
     def fit(self, data, **kwargs):
-        _ensure_masked(data)
+        _ensure_array_is_masked(data)
         self.fitters = {}
         if len(data.shape) > 1:
             for idx, column in enumerate(data.T):
@@ -82,7 +80,7 @@ class Impute:
                 raise ValueError("Only basic imputation techniques work on single column data")
 
     def transform(self, data):
-        _ensure_masked(data)
+        _ensure_array_is_masked(data)
         if not hasattr(self, "fitters"):
             raise Exception("fit first")
 
@@ -93,8 +91,7 @@ class Impute:
                     ret[column.mask, idx] = getattr(self, "_apply_%s" % self.strategy)(data, column, idx,
                                                                                        self.fitters[idx])
         else:
-            if data.mask.sum() > 0:
-                ret[data.mask] = getattr(self, "_apply_%s" % self.strategy)(None, data, None, self.fitters)
+            ret[data.mask] = getattr(self, "_apply_%s" % self.strategy)(None, data, None, self.fitters)
         return ret
 
     def fit_transform(self, data, **kwargs):
@@ -107,21 +104,24 @@ class Impute:
     def _setup_fitters(self):
         for name, fitter_cls in self.POSSIBLE_STRATEGIES.iteritems():
             if fitter_cls is not None:
-                def fit_fun(self, data, column, idx, **kwargs):
-                    train_columns = np.ones(data.shape[1], dtype=bool)
-                    train_columns[idx] = False
-                    fitter = fitter_cls(**kwargs)
-                    fitter.fit(data[~column.mask, :][:, train_columns], column[~column.mask])
-                    return fitter
+                def wrapper_fit(fitter_cls):
+                    def fit_fun(data, column, idx, **kwargs):
+                        train_columns = np.ones(data.shape[1], dtype=bool)
+                        train_columns[idx] = False
+                        fitter = fitter_cls(**kwargs)
+                        fitter.fit(data[~column.mask, :][:, train_columns], column[~column.mask])
+                        return fitter
+                    return fit_fun
+                setattr(self, '_fit_%s' % name, wrapper_fit(fitter_cls))
 
-                setattr(self, '_fit_%s' % name, fit_fun)
+                def wrapper_apply():
+                    def apply_fun(data, column, idx, fitter):
+                        train_columns = np.ones(data.shape[1], dtype=bool)
+                        train_columns[idx] = False
+                        return fitter.predict(data[column.mask, :][:, train_columns])
+                    return apply_fun
 
-                def apply_fun(self, data, column, idx, fitter):
-                    train_columns = np.ones(data.shape[1], dtype=bool)
-                    train_columns[idx] = False
-                    return fitter.predict(data[column.mask, :][:, train_columns])
-
-                setattr(self, '_apply_%s' % name, apply_fun)
+                setattr(self, '_apply_%s' % name, wrapper_apply())
 
 
 class ImputeClassification(Impute):
@@ -140,7 +140,7 @@ class ImputeClassification(Impute):
     def _fit_majority(self, _data, column, _idx):
         return Counter(column[~column.mask]).most_common(1)[0][0]
 
-    def _apply_most_common(self, _data, _column, _idx, values):
+    def _apply_majority(self, _data, _column, _idx, values):
         return values
 
 

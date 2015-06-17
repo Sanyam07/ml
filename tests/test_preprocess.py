@@ -56,18 +56,18 @@ def test_preprocessor_std():
     assert np.allclose(X_reversed, np.nan_to_num(X_transform * pp.std + pp.mean))
 
 
-def test_impute_regression_mean():
+def basic_imputer_test(imputer_class, strategy, **kwargs):
     try:
-        pprocess.ImputeRegression(strategy=None)
+        imputer_class(strategy=None)
     except ValueError as e:
         assert e.message == "strategy not in POSSIBLE_STRATEGIES"
     try:
-        pprocess.ImputeRegression(strategy='invalid')
+        imputer_class(strategy='invalid')
     except ValueError as e:
         assert e.message == "strategy not in POSSIBLE_STRATEGIES"
 
-    imputer = pprocess.ImputeRegression()
-    assert imputer.strategy == 'mean'
+    imputer = imputer_class(strategy=strategy)
+    assert imputer.strategy == strategy
     data = np.ma.MaskedArray(np.ones((10, 10)))
     try:
         imputer.fit(data)
@@ -84,12 +84,62 @@ def test_impute_regression_mean():
         data.mask[:i, i] = True
         data.data[:i, i] = 0
 
-    imputed_data = imputer.fit_transform(data)
+    imputed_data = imputer.fit_transform(data, **kwargs)
     assert np.all(imputed_data.data == np.ones(data.shape))
     assert np.all(imputed_data.mask == np.zeros(data.shape))
 
 
+def test_impute_regression_mean_median():
+    basic_imputer_test(pprocess.ImputeRegression, 'mean')
+    basic_imputer_test(pprocess.ImputeRegression, 'median')
 
+    imputer_mean = pprocess.ImputeRegression()
+    assert imputer_mean.strategy == 'mean'
+    imputer_median = pprocess.ImputeRegression(strategy='median')
+
+    # single column test
+    data = np.ma.MaskedArray(np.arange(50, dtype=float))
+    data[40:] = 100
+    data.mask = np.zeros(50)
+    data.mask[:10] = 1
+    imputed_data = imputer_mean.fit_transform(data)
+    assert np.allclose(imputed_data.data[:10], np.ones(10) * 43.375)
+    assert np.all(imputed_data.mask == np.zeros(data.shape))
+
+    imputed_data = imputer_median.fit_transform(data)
+    assert np.allclose(imputed_data.data[:10], np.ones(10) * 29.5)
+    assert np.all(imputed_data.mask == np.zeros(data.shape))
+
+
+def test_impute_classification_majority():
+    basic_imputer_test(pprocess.ImputeClassification, 'majority')
+
+    imputer_majority = pprocess.ImputeClassification()
+    assert imputer_majority.strategy == 'majority'
+
+    # single column test
+    data = np.ma.MaskedArray(np.arange(50))
+    data[40:] = 100
+    data.mask = np.zeros(50)
+    data.mask[:10] = 1
+    imputed_data = imputer_majority.fit_transform(data)
+    assert np.allclose(imputed_data.data[:10], np.ones(10) * 100)
+    assert np.all(imputed_data.mask == np.zeros(data.shape))
+
+
+def test_impute_regression():
+    basic_imputer_test(pprocess.ImputeRegression, 'tree')
+    basic_imputer_test(pprocess.ImputeRegression, 'rf', n_estimators=5)
+    basic_imputer_test(pprocess.ImputeRegression, 'knn', n_neighbors=3)
+
+    #TODO: expand to specific tests
+
+def test_impute_clasification():
+    basic_imputer_test(pprocess.ImputeClassification, 'tree')
+    basic_imputer_test(pprocess.ImputeClassification, 'rf', n_estimators=5)
+    basic_imputer_test(pprocess.ImputeClassification, 'knn', n_neighbors=3)
+
+    #TODO: expand to specific tests
 
 def test_drop():
     dropper = pprocess.Drop()

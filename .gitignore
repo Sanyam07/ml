@@ -1,0 +1,8 @@
+.gitignore
+
+# PyCharm
+.idea/*
+
+# Python
+*.py[cod]
+*.so

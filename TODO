@@ -1,5 +1,5 @@
-TODO: add requriements
-TODO: clean up multiprovessing
-TODO: clean up wrapper
-TODO: write tests for both
+TODO: add requirements
+TODO: clean up multiprocessing
+TODO: test multiprocessing
+TODO: test wrapper
 TODO: add tests for shape (n, 1)

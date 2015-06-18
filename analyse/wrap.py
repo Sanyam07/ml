@@ -2,44 +2,45 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 from sklearn.feature_selection import SelectKBest, f_regression, f_classif
-from sklearn.svm import SVR
-import sklearn.ensemble as skensemble
+
 from sklearn.decomposition import PCA
 import copy
 from analyse.preprocess import ImputeRegression, ImputeClassification, PreProcessor, Drop
-from sklearn.dummy import DummyRegressor
 
-class TechniqueWrapper:
+
+class _AbstractSingleWrapper:
     __metaclass__ = ABCMeta
     POSSIBLE_TRANSFORMERS = ['kbest', 'pca']
+    DEFAULT_NAME = "_AbstractSingleWrapper"
 
     @staticmethod
     def _validate_inputs(preprocessor, transformer, transform_n, class_imputer):
         if preprocessor not in [None] + PreProcessor.POSSIBLE_KINDS:
             raise ValueError("preprocessor not in PreProcessor.POSSIBLE_KINDS")
-        if transformer not in [None] + TechniqueWrapper.POSSIBLE_TRANSFORMERS:
+        if transformer not in [None] + _AbstractSingleWrapper.POSSIBLE_TRANSFORMERS:
             raise ValueError("transformer not in POSSIBLE_TRANSFORMERS")
         if transformer and transform_n is None:
             raise ValueError("transformer requires a number or 'all' best to be set")
-        if class_imputer not in [None, 'drop'] + ImputeRegression.POSSIBLE_STRATEGIES:
+        if class_imputer not in [None, 'drop'] + ImputeRegression.POSSIBLE_STRATEGIES.keys():
             raise ValueError("class_imputer not in ImputeRegression.POSSIBLE_STRATEGIES")
 
     def __init__(self, technique, preprocessor=None, transform_n=0, transformer=None, class_imputer=None, **kwargs):
-        TechniqueWrapper._validate_inputs(preprocessor, transformer, transform_n, class_imputer)
+        _AbstractSingleWrapper._validate_inputs(preprocessor, transformer, transform_n, class_imputer)
 
         self.technique = technique
         self.preprocessor = preprocessor
         self.class_imputer = class_imputer
         self.transformer = transformer
         self.transform_n = transform_n
-
-        self._technique_instances = None
-        self._transformers = None
-        self._imputers = None
+        self.name = kwargs.pop('name', self.DEFAULT_NAME)
 
         self.kwargs = kwargs
+        self._initialise_containers()
 
-        self.name = "MultitargetWrapper"
+    def _initialise_containers(self):
+        self._technique_instance = None
+        self._transformer = None
+        self._imputer = None
 
     def fit_predict(self, X_train, Y_train, X_test):
         self.fit(X_train, Y_train)
@@ -74,7 +75,109 @@ class TechniqueWrapper:
 
         self.kwargs = kwargs
 
-        TechniqueWrapper._validate_inputs(self.preprocessor, self.transformer, self.transform_n, self.class_imputer)
+        _AbstractSingleWrapper._validate_inputs(self.preprocessor, self.transformer, self.transform_n,
+                                                self.class_imputer)
+        self._initialise_containers()
+
+    def fit(self, X, y):
+        self._2d_output = False
+        if self.class_imputer == "drop":
+            self._imputer = Drop(drop_threshold=self.kwargs.get('drop_treshold', .5), verbose=0)
+
+        # if 2d output
+        if len(y.shape) == 2:
+            self._2d_output = True
+            y = y.T[0]
+
+        if self.preprocessor:
+            X, y = self._preprocess(X, y)
+
+        if self.transformer:
+            self._transformer = self._transform_pca(X) if self.transformer == 'pca' else self._transform_kbest(X, y)
+            X_transformed = self._transformer.transform(X)
+
+        self._technique_instance = self._init_technique()
+        if self.class_imputer == "drop":
+            self._imputer.fit(y)
+            y_transformed = y[self._imputers.row_mask]
+            if self.transformer:
+                X_transformed = X_transformed[self._imputer.row_mask, :]
+            else:
+                X_transformed = X[self._imputer.row_mask, :]
+        elif self.class_imputer:
+            self._imputer = self._get_imputer_instance()
+            y_transformed = self._imputers(y)
+
+        self._technique_instance.fit(X_transformed if self.transformer or self.class_imputer == "drop" else X,
+                                     y_transformed if self.class_imputer else y)
+        return self
+
+    def predict(self, X):
+        if self._technique_instance:  # TODO: add class check
+            raise Exception("The technique needs to be fitted before predicting (call .fit)")
+        Y_prime = np.zeros((X.shape[0], ))
+
+        if self.preprocessor:
+            X = self._X_processor.transform(X)
+
+        if self.transformer:
+            X_transformed = self._transformers.transform(X)
+
+        Y_prime[:] = self._technique_instance.predict(X_transformed if self.transformer else X)
+        Y_return = self._Y_processor.inverse_transform(Y_prime) if self.preprocessor else Y_prime
+        return np.asarray([Y_return]).T if self._2d_output else Y_return
+
+    def _preprocess(self, X, Y):
+        self._X_processor = PreProcessor(X, kind=self.preprocessor)
+        self._Y_processor = PreProcessor(Y, kind=self.preprocessor)
+        return self._X_processor.transform(X), self._Y_processor.transform(Y)
+
+    def _transform_pca(self, X):
+        pca = PCA(self.transform_n)
+        pca.fit(X)
+        return pca
+
+    @abstractmethod
+    def _transform_kbest(self, X, y):
+        raise NotImplementedError()
+
+    @abstractmethod
+    def _get_imputer_instance(self):
+        raise NotImplementedError()
+
+    def _init_technique(self):
+        return self.technique(**self.kwargs)
+
+
+class _AbstractClassifier():
+    __metaclass__ = ABCMeta
+
+    def _get_imputer_instance(self):
+        return ImputeClassification(strategy=self.class_imputer)
+
+    def _transform_kbest(self, X, y):
+        kbest = SelectKBest(f_classif, self.transform_n if self.transform_n < X.shape[1] else "all")
+        kbest.fit(X, y)
+        return kbest
+
+
+class _AbstractRegression():
+    __metaclass__ = ABCMeta
+
+    def _get_imputer_instance(self):
+        return ImputeRegression(strategy=self.class_imputer)
+
+    def _transform_kbest(self, X, y):
+        kbest = SelectKBest(f_regression, self.transform_n if self.transform_n < X.shape[1] else "all")
+        kbest.fit(X, y)
+        return kbest
+
+
+class _AbstractMultiWrapper(_AbstractSingleWrapper):
+    __metaclass__ = ABCMeta
+    DEFAULT_NAME = "_AbstractMultiWrapper"
+
+    def _initialise_containers(self):
         self._technique_instances = None
         self._transformers = None
         self._imputers = None
@@ -92,7 +195,7 @@ class TechniqueWrapper:
         # if single target
         if len(Y.shape) == 1:
             self._singletarget = True
-            Y = np.array([Y]).T
+            Y = np.asarray([Y]).T
 
         if self.preprocessor:
             X, Y = self._preprocess(X, Y)
@@ -142,45 +245,19 @@ class TechniqueWrapper:
         Y_return = self._Y_processor.inverse_transform(Y_prime) if self.preprocessor else Y_prime
         return Y_return.T[0] if self._singletarget else Y_return
 
-    def _preprocess(self, X, Y):
-        self._X_processor = PreProcessor(X, kind=self.preprocessor)
-        self._Y_processor = PreProcessor(Y, kind=self.preprocessor)
-        return self._X_processor.transform(X), self._Y_processor.transform(Y)
 
-    def _transform_pca(self, X):
-        pca = PCA(self.transform_n)
-        pca.fit(X)
-        return pca
-
-    @abstractmethod
-    def _transform_kbest(self, X, y):
-        pass
-
-    @abstractmethod
-    def _get_imputer_instance(self):
-        pass
-
-    def _init_technique(self):
-        return self.technique(**self.kwargs)
+class ClassificationSingleWrapper(_AbstractClassifier, _AbstractSingleWrapper):
+    DEFAULT_NAME = "ClassificationSingleWrapper"
 
 
-class ClassifierWrapper(TechniqueWrapper):
-    def _get_imputer_instance(self):
-        return ImputeClassification(strategy=self.class_imputer)
-
-    def _transform_kbest(self, X, y):
-        kbest = SelectKBest(f_classif, self.best if self.best < X.shape[1] else "all")
-        kbest.fit(X, y)
-        return kbest
+class RegressionSingleWrapper(_AbstractRegression, _AbstractSingleWrapper):
+    DEFAULT_NAME = "RegressionSingleWrapper"
 
 
-class RegressionWrapper(TechniqueWrapper):
-    def _get_imputer_instance(self):
-        return ImputeRegression(strategy=self.class_imputer)
+class ClassificationMultiWrapper(_AbstractClassifier, _AbstractMultiWrapper):
+    DEFAULT_NAME = "ClassificationMultiWrapper"
 
-    def _transform_kbest(self, X, y):
-        kbest = SelectKBest(f_regression, self.best if self.best < X.shape[1] else "all")
-        kbest.fit(X, y)
-        return kbest
 
+class RegressionMultiWrapper(_AbstractMultiWrapper):
+    DEFAULT_NAME = "RegressionMultiWrapper"
 

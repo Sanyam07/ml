@@ -1,6 +1,6 @@
 import numpy as np
 
-import wrapper
+import wrap
 import preprocess
 import test
 

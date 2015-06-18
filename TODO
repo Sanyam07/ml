@@ -3,3 +3,5 @@ TODO: clean up multiprocessing
 TODO: test multiprocessing
 TODO: test wrapper
 TODO: add tests for shape (n, 1)
+
+TODO: add test coverage (explore what other CI stuff people use, CI seems useless here though)

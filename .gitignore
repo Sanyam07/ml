@@ -6,3 +6,4 @@
 # Python
 *.py[cod]
 *.so
+.coverage

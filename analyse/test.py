@@ -280,9 +280,10 @@ class TesterSplit(Tester):
 
 
 class TesterCV(Tester):
-    def __init__(self, folds=4, optimise_individual=False, random_state=42, verbose=1):
+    def __init__(self, folds=4, best_single_learner=False, optimise_individual=False, random_state=42, verbose=1):
         Tester.__init__(self, optimise_individual=optimise_individual, random_state=random_state, verbose=verbose)
 
+        self.best_single_learner = best_single_learner
         self.folds = folds
 
     def initialise(self, X, Y):
@@ -307,18 +308,23 @@ class TesterCV(Tester):
         Y_hat = np.zeros(self.Y.shape)
         for i, (train_ind, test_ind) in enumerate(self.kfold):
             if self.verbose > 0:
-                print "fold%d/%d, trains size %d, test size %d"
+                print "## fold %d/%d (trains size %d, test size %d) ##"
             X_train, X_test, Y_train = self.X[train_ind], self.X[test_ind], self.Y[train_ind]
-            Yp, cls, best_params = self._optimise_learners(X_train, Y_train, learners, parameters, maximise=maximise,
-                                                           scorer=scorer, timeout=timeout, cores=cores,
-                                                           inner_folds=inner_folds, verbose=verbose, return_best=False)
-            if len(Y_hat.shape) == 1:
-                Y_hat[test_ind] = Yp
-            else:
-                Y_hat[test_ind, :] = Yp
+            results = self._optimise_learners(X_train, Y_train, learners, parameters, maximise=maximise,
+                                              scorer=scorer, timeout=timeout, cores=cores,
+                                              inner_folds=inner_folds, verbose=verbose, return_best=False)
 
             classes.append(cls)
             best_parametres.append(best_params)
+
+            if self.optimise_individual:
+                self.best_learners = [v[1] for v in results]
+                self.best_parameters = [v[2] for v in results]
+
+            else:
+                self.best_learners = results[1]
+                self.best_parameters = results[2]
+            return self
 
         if self.verbose > 0:
             print "## CV done in %s ##" % _output_time(global_timer, simple=True)
@@ -328,6 +334,12 @@ class TesterCV(Tester):
     def predict(self):
         if self.optimise_individual:
             Y_hat = self.generate_prediction_from_individ(self.X_test, self.best_learners, self.best_parameters)
+
+            if len(Y_hat.shape) == 1:
+                Y_hat[test_ind] = Yp
+            else:
+                Y_hat[test_ind, :] = Yp
+
         else:
             best_l = self.best_learners(**self.best_parameters)
             best_l.fit(self.X_train, self.Y_train)

@@ -1,18 +1,18 @@
 import analyse.preprocess as pprocess
 import numpy as np
+import pytest
 
 np.random.seed(42)
 
 
 def test_preprocessor():
-    try:
+    with pytest.raises(ValueError) as e:
         pprocess.PreProcessor(kind=None)
-    except ValueError as e:
-        assert e.message == "kind not in POSSIBLE_KINDS"
-    try:
+    assert "kind not in POSSIBLE_KINDS" in str(e.value)
+    with pytest.raises(ValueError) as e:
         pprocess.PreProcessor(kind="not in kind")
-    except ValueError as e:
-        assert e.message == "kind not in POSSIBLE_KINDS"
+    assert "kind not in POSSIBLE_KINDS" in str(e.value)
+
     pp = pprocess.PreProcessor()
     assert pp.norm == True
 
@@ -57,27 +57,24 @@ def test_preprocessor_std():
 
 
 def basic_imputer_test(imputer_class, strategy, **kwargs):
-    try:
+    with pytest.raises(ValueError) as e:
         imputer_class(strategy=None)
-    except ValueError as e:
-        assert e.message == "strategy not in POSSIBLE_STRATEGIES"
-    try:
+    assert "strategy not in POSSIBLE_STRATEGIES" in str(e.value)
+    with pytest.raises(ValueError) as e:
         imputer_class(strategy='invalid')
-    except ValueError as e:
-        assert e.message == "strategy not in POSSIBLE_STRATEGIES"
+    assert "strategy not in POSSIBLE_STRATEGIES" in str(e.value)
 
     imputer = imputer_class(strategy=strategy)
     assert imputer.strategy == strategy
     data = np.ma.MaskedArray(np.ones((10, 10)))
-    try:
+
+    with pytest.raises(ValueError) as e:
         imputer.fit(data)
-    except ValueError as e:
-        assert e.message == "Impute works with a masked array containing missing values"
+    assert "Impute works with a masked array containing missing values" in str(e.value)
     data.mask = np.zeros(data.shape)
-    try:
+    with pytest.raises(ValueError) as e:
         imputer.fit(data)
-    except ValueError as e:
-        assert e.message == "Impute works with a masked array containing missing values"
+    assert "Impute works with a masked array containing missing values" in str(e.value)
 
     data.mask = np.zeros(data.shape)
     for i in range(3, 8):
@@ -132,32 +129,31 @@ def test_impute_regression():
     basic_imputer_test(pprocess.ImputeRegression, 'rf', n_estimators=5)
     basic_imputer_test(pprocess.ImputeRegression, 'knn', n_neighbors=3)
 
-    #TODO: expand to specific tests
+    # TODO: expand to specific tests
+
 
 def test_impute_clasification():
     basic_imputer_test(pprocess.ImputeClassification, 'tree')
     basic_imputer_test(pprocess.ImputeClassification, 'rf', n_estimators=5)
     basic_imputer_test(pprocess.ImputeClassification, 'knn', n_neighbors=3)
 
-    #TODO: expand to specific tests
+    # TODO: expand to specific tests
+
 
 def test_drop():
     dropper = pprocess.Drop()
     assert dropper.drop_threshold == .5
-    try:
+    with pytest.raises(ValueError) as e:
         dropper.fit(np.ones((10, 10)))
-    except ValueError as e:
-        assert e.message == "Impute works with a masked array containing missing values"
+    assert "Impute works with a masked array containing missing values" in str(e.value)
     data = np.ma.MaskedArray(np.ones((10, 10)))
-    try:
+    with pytest.raises(ValueError) as e:
         dropper.fit(data)
-    except ValueError as e:
-        assert e.message == "Impute works with a masked array containing missing values"
+    assert "Impute works with a masked array containing missing values" in str(e.value)
     data.mask = np.zeros(data.shape)
-    try:
+    with pytest.raises(ValueError) as e:
         dropper.fit(data)
-    except ValueError as e:
-        assert e.message == "Impute works with a masked array containing missing values"
+    assert "Impute works with a masked array containing missing values" in str(e.value)
 
     data.mask = np.zeros(data.shape)
     for i in range(3, 8):
@@ -181,10 +177,9 @@ def test_drop():
     assert imputed_data.shape == (3, 10)
 
     data.mask = np.ones(data.shape)
-    try:
+    with pytest.raises(Exception) as e:
         dropper.fit(data)
-    except Exception as e:
-        assert e.message == "all columns would be dropped"
+    assert "all columns would be dropped" in str(e.value)
 
     # single column test
     data = np.ma.MaskedArray(np.ones(10))

@@ -1,28 +1,23 @@
+from tests import *
+from tests.utils import DummyLearner, _test_params
+
 import analyse.test as test
-import numpy as np
 
-np.random.seed(42)
+def test_grid_iterator():
+    parameter_grid = {
+        'p1': range(4),
+        'p2': range(3),
+        'p3': [True, False],
+    }
 
+    parameters_list = [p for p in test.Optimiser._grid_iterator(parameter_grid)]
+    for params in parameters_list:
+        assert params['p1'] in range(4)
+        assert params['p2'] in range(3)
+        assert params['p3'] in [True, False]
+    assert len(parameters_list) == 24
 
-def _test_params(cls, params):
-    for k, v in params.iteritems():
-        assert hasattr(cls, k)
-        assert getattr(cls, k) == v
-
-
-class DummyLearner:
-    def __init__(self, **_):
-        self.shape = None
-        pass
-
-    def fit(self, _, Y):
-        self.shape = Y.shape
-        return self
-
-    def predict(self, X):
-        if len(self.shape) > 1:
-            return np.zeros((X.shape[0], self.shape[1]))
-        return np.zeros((X.shape[0], ))
+    # TODO add  'not_param': None excption test
 
 
 def test_optimiser():
@@ -37,3 +32,15 @@ def test_optimiser():
     }
     optimiser = test.Optimiser(None)
     _test_params(optimiser, default_params)
+
+    X = np.arange(200).reshape((20, 10))
+    Y_mt = np.arange(40).reshape((20, 2))
+    Y_st = np.arange(40)
+
+    Yp = optimiser.cross_validation(X, Y_mt, DummyLearner(), parallel=False)
+    print Yp
+
+
+    Yp = optimiser.cross_validation(X, Y_mt, DummyLearner(), parallel=True)
+    print Yp
+

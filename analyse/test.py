@@ -13,8 +13,8 @@ def _pickle_bypass(cls, function_name, *args, **kwargs):
     return getattr(cls, function_name)(*args, **kwargs)
 
 
-def _output_time(time, simple=False):
-    print ("%.2f" if simple else "** time taken: %.2f **") % (time() - time)
+def _output_time(timer, simple=False):
+    print ("%.2f" if simple else "** time taken: %.2f **") % (time() - timer)
 
 
 class Optimiser:
@@ -69,9 +69,9 @@ class Optimiser:
         try:
             for r, test_ind in cv_res:
                 if len(Y_prime.shape) == 1:
-                    Y_prime[test_ind] = r.get(self.timeout + 5)
+                    Y_prime[test_ind] = r.get(self.timeout + 5 if self.timeout else None)
                 else:
-                    Y_prime[test_ind, :] = r.get(self.timeout + 5)
+                    Y_prime[test_ind, :] = r.get(self.timeout + 5 if self.timeout else None)
         except (billiard.SoftTimeLimitExceeded, billiard.TimeoutError):
             # invalidate whole run upon exception
             pool.terminate()
@@ -99,7 +99,7 @@ class Optimiser:
             start_time = time()
             err = False
             try:
-                score, start_time = r.get(self.timeout + 5)
+                score, start_time = r.get(self.timeout + 5 if self.timeout else None)
                 if self.verbose > 2:
                     print "** %.5f ** (%s, %s)" % (score, tech_c, params),
                 results.append((score, tech_c, params))

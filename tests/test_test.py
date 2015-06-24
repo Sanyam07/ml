@@ -3,6 +3,7 @@ from tests.utils import DummyLearner, _test_params
 
 import analyse.test as test
 
+
 def test_grid_iterator():
     parameter_grid = {
         'p1': range(4),
@@ -17,7 +18,8 @@ def test_grid_iterator():
         assert params['p3'] in [True, False]
     assert len(parameters_list) == 24
 
-    # TODO add  'not_param': None excption test
+    with pytest.raises(TypeError) as e:
+        _ = [_ for _ in test.Optimiser._grid_iterator({'not_range': None})]
 
 
 def test_optimiser():
@@ -39,7 +41,6 @@ def test_optimiser():
 
     Yp = optimiser.cross_validation(X, Y_mt, DummyLearner(), parallel=False)
     print Yp
-
 
     Yp = optimiser.cross_validation(X, Y_mt, DummyLearner(), parallel=True)
     print Yp

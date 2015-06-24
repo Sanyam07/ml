@@ -1,7 +1,6 @@
-import analyse.score as score
-import numpy as np
+from tests import *
 
-np.random.seed(42)
+import analyse.score as score
 
 
 def test_check_masked():

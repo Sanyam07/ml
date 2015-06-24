@@ -1,8 +1,6 @@
-import analyse.preprocess as pprocess
-import numpy as np
-import pytest
+from tests import *
 
-np.random.seed(42)
+import analyse.preprocess as pprocess
 
 
 def test_preprocessor():

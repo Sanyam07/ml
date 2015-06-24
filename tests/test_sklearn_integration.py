@@ -1,1 +1,1 @@
-__author__ = 'mlevar'
+from tests import *

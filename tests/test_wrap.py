@@ -1,7 +1,6 @@
-import analyse.wrap as wrap
-import numpy as np
+from tests import *
 
-np.random.seed(42)
+import analyse.wrap as wrap
 
 
 def test_single_target():

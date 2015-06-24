@@ -1,11 +1,7 @@
-from abc import ABCMeta, abstractmethod
-
-import numpy as np
 from sklearn.feature_selection import SelectKBest, f_regression, f_classif
-
 from sklearn.decomposition import PCA
-import copy
-from analyse.preprocess import ImputeRegression, ImputeClassification, PreProcessor, Drop
+
+from analyse import *
 
 
 class _AbstractSingleWrapper:
@@ -15,14 +11,14 @@ class _AbstractSingleWrapper:
 
     @staticmethod
     def _validate_inputs(preprocessor, transformer, transform_n, class_imputer):
-        if preprocessor not in [None] + PreProcessor.POSSIBLE_KINDS:
-            raise ValueError("preprocessor not in PreProcessor.POSSIBLE_KINDS")
+        if preprocessor not in [None] + preprocess.PreProcessor.POSSIBLE_KINDS:
+            raise ValueError("preprocessor not in preprocess.PreProcessor.POSSIBLE_KINDS")
         if transformer not in [None] + _AbstractSingleWrapper.POSSIBLE_TRANSFORMERS:
             raise ValueError("transformer not in POSSIBLE_TRANSFORMERS")
         if transformer and transform_n is None:
             raise ValueError("transformer requires a number or 'all' best to be set")
-        if class_imputer not in [None, 'drop'] + ImputeRegression.POSSIBLE_STRATEGIES.keys():
-            raise ValueError("class_imputer not in ImputeRegression.POSSIBLE_STRATEGIES")
+        if class_imputer not in [None, 'drop'] + preprocess.ImputeRegression.POSSIBLE_STRATEGIES.keys():
+            raise ValueError("class_imputer not in preprocess.ImputeRegression.POSSIBLE_STRATEGIES")
 
     def __init__(self, technique, preprocessor=None, transform_n=0, transformer=None, class_imputer=None, **kwargs):
         _AbstractSingleWrapper._validate_inputs(preprocessor, transformer, transform_n, class_imputer)
@@ -82,7 +78,7 @@ class _AbstractSingleWrapper:
     def fit(self, X, y):
         self._2d_output = False
         if self.class_imputer == "drop":
-            self._imputer = Drop(drop_threshold=self.kwargs.get('drop_treshold', .5), verbose=0)
+            self._imputer = preprocess.Drop(drop_threshold=self.kwargs.get('drop_treshold', .5), verbose=0)
 
         # if 2d output
         if len(y.shape) == 2:
@@ -128,8 +124,8 @@ class _AbstractSingleWrapper:
         return np.asarray([Y_return]).T if self._2d_output else Y_return
 
     def _preprocess(self, X, Y):
-        self._X_processor = PreProcessor(X, kind=self.preprocessor)
-        self._Y_processor = PreProcessor(Y, kind=self.preprocessor)
+        self._X_processor = preprocess.PreProcessor(X, kind=self.preprocessor)
+        self._Y_processor = preprocess.PreProcessor(Y, kind=self.preprocessor)
         return self._X_processor.transform(X), self._Y_processor.transform(Y)
 
     def _transform_pca(self, X):
@@ -153,7 +149,7 @@ class _AbstractClassifier():
     __metaclass__ = ABCMeta
 
     def _get_imputer_instance(self):
-        return ImputeClassification(strategy=self.class_imputer)
+        return preprocess.ImputeClassification(strategy=self.class_imputer)
 
     def _transform_kbest(self, X, y):
         kbest = SelectKBest(f_classif, self.transform_n if self.transform_n < X.shape[1] else "all")
@@ -165,7 +161,7 @@ class _AbstractRegression():
     __metaclass__ = ABCMeta
 
     def _get_imputer_instance(self):
-        return ImputeRegression(strategy=self.class_imputer)
+        return preprocess.ImputeRegression(strategy=self.class_imputer)
 
     def _transform_kbest(self, X, y):
         kbest = SelectKBest(f_regression, self.transform_n if self.transform_n < X.shape[1] else "all")
@@ -188,7 +184,7 @@ class _AbstractMultiWrapper(_AbstractSingleWrapper):
         if self.transformer:
             self._transformers = []
         if self.class_imputer == "drop":
-            self._imputers = Drop(drop_threshold=self.kwargs.get('drop_treshold', .5), verbose=0)
+            self._imputers = preprocess.Drop(drop_threshold=self.kwargs.get('drop_treshold', .5), verbose=0)
         elif self.class_imputer:
             self._imputers = []
 

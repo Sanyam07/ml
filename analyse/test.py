@@ -1,11 +1,10 @@
 from itertools import product, izip
-from abc import ABCMeta, abstractmethod
 from timeit import default_timer as time
 
 import billiard
 import sklearn.cross_validation as cv
-import numpy as np
-import analyse.score as score
+
+from analyse import *
 
 
 def _pickle_bypass(cls, function_name, *args, **kwargs):

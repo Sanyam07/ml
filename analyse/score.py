@@ -1,5 +1,6 @@
 from itertools import izip
-import numpy as np
+
+from analyse import *
 
 
 def _check_masked(y_true, y_pred):

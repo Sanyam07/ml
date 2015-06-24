@@ -1,11 +1,10 @@
-from abc import ABCMeta
 from collections import Counter
 
-import numpy as np
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
 
+from analyse import *
 
 def _ensure_array_is_masked(array):
     if not np.ma.isMaskedArray(array) or not np.ma.is_masked(array):

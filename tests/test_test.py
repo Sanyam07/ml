@@ -40,8 +40,10 @@ def test_optimiser():
     Y_st = np.arange(40)
 
     Yp = optimiser.cross_validation(X, Y_mt, DummyLearner(), parallel=False)
-    print Yp
+    assert Yp.shape == Y_mt.shape
 
     Yp = optimiser.cross_validation(X, Y_mt, DummyLearner(), parallel=True)
-    print Yp
+    assert Yp.shape == Y_mt.shape
 
+if __name__ == "__main__":
+    test_optimiser()

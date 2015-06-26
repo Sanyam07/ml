@@ -6,9 +6,29 @@ import sklearn.cross_validation as cv
 
 from analyse import *
 
+if DEBUG_POOL:
+    import logging
+    from billiard import util
+
+    logger = util.get_logger()
+    logger.setLevel(util.DEBUG)
+
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+
 
 def _pickle_bypass(cls, function_name, *args, **kwargs):
-    #: used to bypass multiprocessing
+    """
+    Used to bypass multiprocessing limit on pickling class methods and functions
+
+    Example:
+    pool.apply_async(_pickle_bypass, (cls, 'fun_name', arg1, arg2), {'kwarg1': val})
+
+    :param cls: class to be pickled
+    :param function_name: name of the class function or method:
+    :return:
+    """
     return getattr(cls, function_name)(*args, **kwargs)
 
 
@@ -16,7 +36,15 @@ def _output_time(timer, simple=False):
     print ("%.2f" if simple else "** time taken: %.2f **") % (time() - timer)
 
 
+def _softtimeout_supported():
+    import signal
+
+    return getattr(signal, "SIGUSR1", None) is not None
+
+
 class Optimiser:
+    SUPPORTS_SOFTTIMEOUTS = _softtimeout_supported()
+
     def __init__(self, scorer, maximise=True, folds=4, timeout=None, cores=2, verbose=1, shuffle=False,
                  random_state=42):
         self.folds = folds
@@ -29,6 +57,12 @@ class Optimiser:
         self.maximise = maximise
 
         self.random_state = random_state
+
+    @staticmethod
+    def _init_pool(n_processes, timeout=None):
+        if Optimiser.SUPPORTS_SOFTTIMEOUTS:
+            return billiard.Pool(processes=n_processes, soft_timeout=timeout)
+        return billiard.Pool(processes=n_processes, timeout=timeout)
 
     @staticmethod
     def _grid_iterator(grid):
@@ -56,7 +90,7 @@ class Optimiser:
 
     def _cross_validation_pool(self, X, Y, technique_object):
         start_time = time()
-        pool = billiard.Pool(processes=self.cores, soft_timeout=self.timeout)
+        pool = Optimiser._init_pool(self.cores, timeout=self.timeout)
         kf = cv.KFold(X.shape[0], n_folds=self.folds, shuffle=self.shuffle, random_state=self.random_state)
         Y_prime = np.zeros(Y.shape)
         cv_res = []
@@ -71,7 +105,7 @@ class Optimiser:
                     Y_prime[test_ind] = r.get(self.timeout + 5 if self.timeout else None)
                 else:
                     Y_prime[test_ind, :] = r.get(self.timeout + 5 if self.timeout else None)
-        except (billiard.SoftTimeLimitExceeded, billiard.TimeoutError):
+        except (billiard.SoftTimeLimitExceeded, billiard.TimeLimitExceeded, billiard.TimeoutError):
             # invalidate whole run upon exception
             pool.terminate()
             if self.verbose > 3:
@@ -83,7 +117,7 @@ class Optimiser:
         return Y_prime, start_time
 
     def _multiple_pool(self, X, Y, technique_classes, grids, return_best=True):
-        pool = billiard.Pool(processes=self.cores, soft_timeout=self.timeout)
+        pool = Optimiser._init_pool(self.cores, timeout=self.timeout)
         pool_res = []
         results = []
         global_timer = time()
@@ -94,7 +128,7 @@ class Optimiser:
                 r = pool.apply_async(_pickle_bypass, (self, "_cross_validation", X, Y, technique_object))
                 pool_res.append((r, tech_c, params))
 
-        for r, reg_c_params in pool_res:
+        for r, tech_c, params in pool_res:
             start_time = time()
             err = False
             try:
@@ -102,7 +136,7 @@ class Optimiser:
                 if self.verbose > 2:
                     print "** %.5f ** (%s, %s)" % (score, tech_c, params),
                 results.append((score, tech_c, params))
-            except billiard.SoftTimeLimitExceeded:
+            except (billiard.SoftTimeLimitExceeded, billiard.TimeLimitExceeded):
                 print "** TIME LIMIT ** (%s, %s)" % (tech_c, params),
                 err = True
             except billiard.TimeoutError:
@@ -110,9 +144,9 @@ class Optimiser:
                 err = True
             if self.verbose > 2 or err:
                 _output_time(start_time, simple=True)
+
         pool.close()
         pool.join()
-
         if self.verbose > 1:
             print "** Optimisation done in %s **" % _output_time(global_timer)
 
